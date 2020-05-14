@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: airflow-iam
+data:
+  iam_role: ""
+  iam_polices: |
