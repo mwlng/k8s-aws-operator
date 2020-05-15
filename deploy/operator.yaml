@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: k8s-aws-operator
+  namespace: kube-system
 spec:
   replicas: 1
   selector:
@@ -11,23 +12,37 @@ spec:
     metadata:
       labels:
         name: k8s-aws-operator
+      namespace: kube-system
     spec:
       serviceAccountName: k8s-aws-operator
       containers:
         - name: k8s-aws-operator
-          # Replace this with the built image name
-          image: REPLACE_IMAGE
+          image: 524458042105.dkr.ecr.us-east-1.amazonaws.com/k8s-aws-operator:0.0.1
           command:
-          - k8s-aws-operator
+            - k8s-aws-operator
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
+              value: ""
+            - name: OPERATOR_NAME
+              value: "k8s-aws-operator"
             - name: POD_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            - name: OPERATOR_NAME
-              value: "k8s-aws-operator"
+            - name: AWS_ROLE_ARN
+              value: arn:aws:iam::524458042105:role/eksctl-dev-private-addon-iamserviceaccount-k-Role1-63C4O4LAW0TW
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: /var/run/secrets/eks.amazonaws.com/serviceaccount/token
+          volumeMounts:
+            - mountPath: /var/run/secrets/eks.amazonaws.com/serviceaccount
+              name: aws-iam-token
+              readOnly: true
+      volumes:
+        - name: aws-iam-token
+          projected:
+            defaultMode: 420
+            sources:
+              - serviceAccountToken:
+                audience: sts.amazonaws.com
+                expirationSeconds: 86400
