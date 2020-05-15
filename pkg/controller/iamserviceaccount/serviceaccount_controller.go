@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/redhat-cop/operator-utils/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,6 +23,7 @@ import (
 var (
 	log            = logf.Log.WithName("controller_iamserviceaccount")
 	controllerName = "iamserviceaccount-controller"
+	finalizerName  = "iamserviceaccount/cleanup"
 )
 
 /**
@@ -104,40 +104,61 @@ func (r *ReconcileServiceAccount) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	isa := NewIamServiceAccount(instance)
-	if isa.isIamServiceAccount() {
-		if util.IsBeingDeleted(instance) {
-			if !util.HasFinalizer(instance, controllerName) {
-				return reconcile.Result{}, nil
-			}
-			err := cleanUp(instance)
-			if err != nil {
-				reqLogger.Info("Unable to delete iam service account instance",
-					"Instance.Namespace", instance.Namespace, "Instance.Name", instance.Name)
-				return reconcile.Result{}, err
-			}
-			util.RemoveFinalizer(instance, controllerName)
-			err = r.client.Update(context.TODO(), instance)
-			if err != nil {
-				reqLogger.Info("Unable to update iam service account instance",
-					"Instance.Namespace", instance.Namespace, "Instance.Name", instance.Name)
-				return reconcile.Result{}, err
+	if isa.IsIamServiceAccount() {
+		if isa.IsBeingDeleted() {
+			if isa.HasFinalizer(finalizerName) {
+				err := cleanup(isa)
+				if err != nil {
+					reqLogger.Info("Unable to delete iam service account instance",
+						"Instance.Namespace", isa.GetNamespace(), "Instance.Name", isa.GetName())
+					return reconcile.Result{}, err
+				}
+				isa.RemoveFinalizer(finalizerName)
+				err = r.client.Update(context.TODO(), isa.GetInstance())
+				if err != nil {
+					reqLogger.Info("Unable to update iam service account instance",
+						"Instance.Namespace", isa.GetNamespace(), "Instance.Name", isa.GetName())
+					return reconcile.Result{}, err
+				}
 			}
 			return reconcile.Result{}, nil
 		}
 
-		err := isa.validate()
+		err := isa.Validate()
 		if err != nil {
-			return reconcile.Result{Requeue: false}, err
+			reqLogger.Info("Invalid iam service account: "+err.Error(),
+				"Instance.Namespace", isa.GetNamespace(), "Instance.Name", isa.GetName())
+			return reconcile.Result{}, nil
 		}
 
-		iamRoleName := isa.GenerateRoleName()
-		instance.SetFinalizers([]string{iamRoleName})
+		iamRoleName := isa.GetRoleName()
+		annotations := isa.GetAnnotations()
+		if _, ok := annotations["roleName"]; !ok {
+			annotations["roleName"] = iamRoleName
+			isa.sa.SetAnnotations(annotations)
+			err = r.client.Update(context.TODO(), isa.GetInstance())
+			if err != nil {
+				reqLogger.Info("Unable to update iam service account annotations",
+					"Instance.Namespace", isa.GetNamespace(), "Instance.Name", isa.GetName())
+				return reconcile.Result{}, err
+			}
+		}
+
+		if !isa.HasFinalizer(finalizerName) {
+			isa.SetFinalizers([]string{"iamserviceaccount/cleanup"})
+			err = r.client.Update(context.TODO(), isa.GetInstance())
+			if err != nil {
+				reqLogger.Info("Unable to update iam service account finalizers",
+					"Instance.Namespace", isa.GetNamespace(), "Instance.Name", isa.GetName())
+				return reconcile.Result{}, err
+			}
+		}
 
 		// Define a new configmap object
-		configMap := newConfigMapForSA(isa, iamRoleName)
+		configMap := newConfigMapForISA(isa, iamRoleName)
 
 		// Set ServiceAccount instance as the owner and controller
-		if err := controllerutil.SetControllerReference(instance, configMap, r.scheme); err != nil {
+		if err := controllerutil.SetControllerReference(isa.GetInstance(), configMap, r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -150,7 +171,8 @@ func (r *ReconcileServiceAccount) Reconcile(request reconcile.Request) (reconcil
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-			reqLogger.Info("Creating a new ConfigMap", configMap.Namespace, "ConfigMap.Name", configMap.Name)
+			reqLogger.Info("Creating a new ConfigMap",
+				"ConfigMap.Namespace", configMap.Namespace, "ConfigMap.Name", configMap.Name)
 			err = r.client.Create(context.TODO(), configMap)
 			if err != nil {
 				return reconcile.Result{}, err
@@ -176,7 +198,7 @@ func (r *ReconcileServiceAccount) Reconcile(request reconcile.Request) (reconcil
 	return reconcile.Result{}, nil
 }
 
-func newConfigMapForSA(isa *IamServiceAccount, iamRoleName string) *corev1.ConfigMap {
+func newConfigMapForISA(isa *IamServiceAccount, iamRoleName string) *corev1.ConfigMap {
 	var data map[string]string = map[string]string{}
 	attachedPolicies := isa.GetAttachedPolicies()
 	data["iam_role"] = iamRoleName
@@ -187,7 +209,7 @@ func newConfigMapForSA(isa *IamServiceAccount, iamRoleName string) *corev1.Confi
 
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      isa.GetName(),
+			Name:      fmt.Sprintf("%s-configmap", isa.GetName()),
 			Namespace: isa.GetNamespace(),
 			Labels:    labels,
 		},
@@ -196,9 +218,10 @@ func newConfigMapForSA(isa *IamServiceAccount, iamRoleName string) *corev1.Confi
 }
 
 func applyChanges(isa *IamServiceAccount) error {
-	roleName := isa.GenerateRoleName()
+	roleName := isa.GetRoleName()
 	policies := isa.GetAttachedPolicies()
 	role := iamClient.GetRole(&roleName)
+
 	if role != nil {
 		err := updateIamRoleWithPolicies(roleName, policies)
 		if err != nil {
@@ -216,10 +239,10 @@ func applyChanges(isa *IamServiceAccount) error {
 	return nil
 }
 
-func cleanUp(instance *corev1.ServiceAccount) error {
-	finalizers := instance.GetFinalizers()
-	for _, f := range finalizers {
-		err := deleteIamRole(f)
+func cleanup(isa *IamServiceAccount) error {
+	annotations := isa.GetAnnotations()
+	if roleName, ok := annotations["roleName"]; ok {
+		err := deleteIamRole(roleName)
 		if err != nil {
 			return err
 		}
@@ -288,7 +311,7 @@ func updateIamRoleWithPolicies(roleName string, newPolicies []string) error {
 	}
 
 	for _, m := range missing {
-		err := iamClient.AttachRolePolicy(&roleName, &m)
+		err := iamClient.DetachRolePolicy(&roleName, &m)
 		if err != nil {
 			return err
 		}

@@ -7,39 +7,64 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/lithammer/shortuuid"
+	"github.com/redhat-cop/operator-utils/pkg/util"
 )
 
+type InvalidIamServiceAccountError struct {
+	Err error
+}
+
+func (e *InvalidIamServiceAccountError) Error() string {
+	return e.Err.Error()
+}
+
 type IamServiceAccount struct {
-	sa *corev1.ServiceAccount
+	sa       *corev1.ServiceAccount
+	roleName string
 }
 
 func NewIamServiceAccount(sa *corev1.ServiceAccount) *IamServiceAccount {
 	return &IamServiceAccount{
-		sa: sa,
+		sa:       sa,
+		roleName: "",
 	}
 }
 
-func (i *IamServiceAccount) isIamServiceAccount() bool {
+func (i *IamServiceAccount) IsIamServiceAccount() bool {
 	if t, ok := i.sa.Labels["type"]; ok && t == "iam" {
 		return true
 	}
 	return false
 }
 
-func (i *IamServiceAccount) validate() error {
-	if id, ok := i.sa.Annotations["accountId"]; !ok && strings.TrimSpace(id) == "" {
-		return nil
+func (i *IamServiceAccount) Validate() error {
+	if id, ok := i.sa.Annotations["accountId"]; !ok || strings.TrimSpace(id) == "" {
+		return &InvalidIamServiceAccountError{
+			Err: fmt.Errorf("Missing or empty annotation field: %s", "accountId"),
+		}
 	}
 
-	if id, ok := i.sa.Annotations["eksId"]; !ok && strings.TrimSpace(id) == "" {
-		return nil
+	if id, ok := i.sa.Annotations["eksId"]; !ok || strings.TrimSpace(id) == "" {
+		return &InvalidIamServiceAccountError{
+			Err: fmt.Errorf("Missing or empty annotation field: %s", "eksId"),
+		}
 	}
 
-	if policies, ok := i.sa.Annotations["attachedPolicies"]; !ok && strings.TrimSpace(policies) == "" {
-		return nil
+	if policies, ok := i.sa.Annotations["attachedPolicies"]; !ok || strings.TrimSpace(policies) == "" {
+		return &InvalidIamServiceAccountError{
+			Err: fmt.Errorf("Missing or empty annotation field: %s", "attachedPolicies"),
+		}
 	}
 
 	return nil
+}
+
+func (i *IamServiceAccount) GetInstance() *corev1.ServiceAccount {
+	return i.sa
+}
+
+func (i *IamServiceAccount) GetAnnotations() map[string]string {
+	return i.sa.Annotations
 }
 
 func (i *IamServiceAccount) GetName() string {
@@ -77,16 +102,58 @@ func (i *IamServiceAccount) GetAttachedPolicies() []string {
 	if policies, ok := i.sa.Annotations["attachedPolicies"]; ok {
 		attachedPolicies := strings.Split(policies, ",")
 		for _, p := range attachedPolicies {
-			ret = append(ret, strings.TrimSpace(p))
+			policy := strings.TrimSpace(p)
+			if len(policy) != 0 {
+				ret = append(ret, policy)
+			}
 		}
 	}
 	return ret
 }
 
-func (i *IamServiceAccount) GenerateRoleName() string {
-	return fmt.Sprintf("eks-%s-%s-%s-%s",
+func (i *IamServiceAccount) GetRoleName() string {
+	if len(strings.TrimSpace(i.roleName)) == 0 {
+		if roleName, ok := i.sa.Annotations["roleName"]; ok && len(strings.TrimSpace(roleName)) != 0 {
+			i.roleName = roleName
+		} else {
+			i.roleName = i.generateRoleName()
+		}
+	}
+	return i.roleName
+}
+
+func (i *IamServiceAccount) generateRoleName() string {
+	sid := shortuuid.New()
+	roleName := fmt.Sprintf("eks-%s-%s-%s-%s",
 		i.GetClusterName(),
 		i.GetNamespace(),
 		i.GetName(),
-		shortuuid.New())
+		sid)
+	if len(roleName) > 64 {
+		roleName = fmt.Sprintf("eks-%s-%s-%s",
+			i.GetClusterName(),
+			i.GetNamespace(),
+			sid)
+	}
+	return roleName
+}
+
+func (i *IamServiceAccount) IsBeingDeleted() bool {
+	return util.IsBeingDeleted(i.sa)
+}
+
+func (i *IamServiceAccount) HasFinalizer(finalizerName string) bool {
+	return util.HasFinalizer(i.sa, finalizerName)
+}
+
+func (i *IamServiceAccount) SetFinalizers(finalizers []string) {
+	i.sa.SetFinalizers(finalizers)
+}
+
+func (i *IamServiceAccount) GetFinalizers() []string {
+	return i.sa.GetFinalizers()
+}
+
+func (i *IamServiceAccount) RemoveFinalizer(finalizerName string) {
+	util.RemoveFinalizer(i.sa, finalizerName)
 }

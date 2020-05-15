@@ -4,4 +4,4 @@ metadata:
   name: airflow-iam
 data:
   iam_role: ""
-  iam_polices: |
+  iam_polices: "[]"
