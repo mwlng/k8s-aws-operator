@@ -1,8 +1,7 @@
-kind: Role
+kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
   name: k8s-aws-operator
-  namespace: kube-system
 rules:
   - apiGroups:
       - ""
@@ -15,6 +14,8 @@ rules:
       - events
       - configmaps
       - secrets
+      - namespaces
+      - serviceaccounts
     verbs:
       - create
       - delete

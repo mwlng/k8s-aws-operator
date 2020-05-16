@@ -41,8 +41,9 @@ spec:
       volumes:
         - name: aws-iam-token
           projected:
-            defaultMode: 420
+            defaultMode: 0640
             sources:
               - serviceAccountToken:
-                audience: sts.amazonaws.com
-                expirationSeconds: 86400
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 86400
+                  path: token
