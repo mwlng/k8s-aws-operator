@@ -613,8 +613,8 @@ github.com/munnerz/goautoneg v0.0.0-20120707110453-a547fc61f48d/go.mod h1:+n7T8m
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/mwitkow/go-conntrack v0.0.0-20161129095857-cc309e4a2223/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
 github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f/go.mod h1:qRWi+5nqEBWmkhHvq77mSJWrCKwh8bxhgT7d/eI7P4U=
-github.com/mwlng/aws-go-clients v0.0.0-20200509173709-37428f5a5eca h1:x3zpp6+8GN2SbdfVfjW+qyUWuDDdxFgiCBAhJtmUO9I=
-github.com/mwlng/aws-go-clients v0.0.0-20200509173709-37428f5a5eca/go.mod h1:Hi7hqvRcarTM2kA8gdbRjtvhE2xJJTMJ+sKiYm8kTME=
+github.com/mwlng/aws-go-clients v0.0.0-20200516152156-4dab960990d5 h1:v8383k80TRYRgebDHUpSE5eMajT9j62xdNzsVySinfE=
+github.com/mwlng/aws-go-clients v0.0.0-20200516152156-4dab960990d5/go.mod h1:Hi7hqvRcarTM2kA8gdbRjtvhE2xJJTMJ+sKiYm8kTME=
 github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f/go.mod h1:ZdcZmHo+o7JKHSa8/e818NopupXU1YMK5fe1lsApnBw=
 github.com/nakagami/firebirdsql v0.0.0-20190310045651-3c02a58cfed8/go.mod h1:86wM1zFnC6/uDBfZGNwB65O+pR2OFi5q/YQaEUid1qA=
 github.com/ncw/swift v1.0.47/go.mod h1:23YIA4yWVnGwv2dQlN4bB7egfYX6YLn0Yo/S6zZO/ZM=
