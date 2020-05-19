@@ -17,7 +17,7 @@ spec:
       serviceAccountName: k8s-aws-operator
       containers:
         - name: k8s-aws-operator
-          image: 524458042105.dkr.ecr.us-east-1.amazonaws.com/k8s-aws-operator:0.0.1
+          image: 524458042105.dkr.ecr.us-east-1.aazonaws.com/k8s-aws-operator:0.0.2
           command:
             - k8s-aws-operator
           imagePullPolicy: Always
