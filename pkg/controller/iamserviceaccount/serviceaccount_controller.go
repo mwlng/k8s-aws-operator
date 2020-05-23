@@ -201,7 +201,8 @@ func (r *ReconcileServiceAccount) Reconcile(request reconcile.Request) (reconcil
 func newConfigMapForISA(isa *IamServiceAccount, iamRoleName string) *corev1.ConfigMap {
 	var data map[string]string = map[string]string{}
 	attachedPolicies := isa.GetAttachedPolicies()
-	data["iam_role"] = iamRoleName
+	data["iam_role"] = fmt.Sprintf("arn:aws:iam::%s:role/%s", isa.GetAccountId(), iamRoleName)
+
 	jsonPolicies, _ := json.Marshal(attachedPolicies)
 	data["iam_policies"] = string(jsonPolicies)
 
